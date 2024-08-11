@@ -1,7 +1,8 @@
 import pandas as pd
-from abc import ABC, abstractmethod
-from typing import List
+from abc import ABC
+from typing import List, Literal
 
+from pandas import DataFrame
 import signals
 from data_classes import CandleFrame
 
@@ -12,50 +13,58 @@ class BaseStrategy(ABC):
         candle_frame: CandleFrame,
         initial_balance: float,
         allow_short: bool = False,
-    ):
-        self.candle_frame = candle_frame
-        self.df = candle_frame.to_dataframe()
-        self.balance = initial_balance
-        self.long_position = 0  # Current long position
-        self.short_position = 0  # Current short position
-        self.allow_short = allow_short  # Flag to allow short positions
-        self.trade_log = []  # Log of trades
+    ) -> None:
+        self.candle_frame: CandleFrame = candle_frame
+        self.df: DataFrame = candle_frame.to_dataframe()
+        self.balance: float = initial_balance
+        self.allow_short: bool = allow_short
+        self.long_position: int = 0
+        self.short_position: int = 0
+        self.trade_log: list = []
+        self.signal_df: DataFrame = None
+        self.signal: signals.BaseSignal = None
 
-    @abstractmethod
-    def apply_strategy(self):
-        pass
+    def apply_strategy(self) -> None:
+        for _, row in self.signal_df.iterrows():
+            if row[self.signal.name] == 1:
+                if self.short_position > 0:
+                    self.sell(row["close"], row.name)
+                self.buy(row["close"], row.name)
+            elif row[self.signal.name] == -1:
+                if self.long_position > 0:
+                    self.sell(row["close"], row.name)
+                elif self.allow_short:
+                    self.sell(row["close"], row.name)
 
-    def buy(self, price, timestamp):
-        if self.long_position == 0:  # Only buy if no current long position
-            self.long_position = self.balance / price  # Buy with entire balance
-            self.balance = 0  # All money is now in the position
+    def buy(self, price, timestamp) -> None:
+        if self.long_position == 0:
+            self.long_position = self.balance / price
+            self.balance = 0
             self.trade_log.append(
                 (timestamp, "BUY", price, self.long_position, self.balance)
             )
 
-    def sell(self, price, timestamp):
-        if self.long_position > 0:  # Only sell if holding a long position
-            self.balance = self.long_position * price  # Sell all positions
-            self.long_position = 0  # No more position
+    def sell(self, price, timestamp) -> None:
+        if self.long_position > 0:
+            self.balance = self.long_position * price
+            self.long_position = 0
             self.trade_log.append(
                 (timestamp, "SELL", price, self.long_position, self.balance)
             )
-        elif (
-            self.allow_short and self.short_position == 0
-        ):  # Enter short position if allowed
-            self.short_position = self.balance / price  # Short with entire balance
-            self.balance = 0  # All money is now in the short position
+        elif self.allow_short and self.short_position == 0:
+            self.short_position = self.balance / price
+            self.balance = 0
             self.trade_log.append(
                 (timestamp, "SHORT", price, self.short_position, self.balance)
             )
-        elif self.short_position > 0:  # Cover short position
-            self.balance = self.short_position * price  # Cover all short positions
-            self.short_position = 0  # No more short position
+        elif self.short_position > 0:
+            self.balance = self.short_position * price
+            self.short_position = 0
             self.trade_log.append(
                 (timestamp, "COVER", price, self.short_position, self.balance)
             )
 
-    def get_trade_log(self):
+    def get_trade_log(self) -> DataFrame:
         return pd.DataFrame(
             self.trade_log,
             columns=["timestamp", "action", "price", "position", "balance"],
@@ -69,11 +78,11 @@ class CombinedStrategy(BaseStrategy):
         initial_balance: float,
         strategies: List[BaseStrategy],
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
         self.strategies = strategies
 
-    def apply_strategy(self):
+    def apply_combined_strategy(self) -> None:
         combined_signals = pd.DataFrame(index=self.df.index)
 
         for strategy in self.strategies:
@@ -90,22 +99,18 @@ class CombinedStrategy(BaseStrategy):
         for index, row in combined_signals.iterrows():
             if row["combined_signal"] == "BUY":
                 if self.short_position > 0:
-                    self.sell(
-                        self.df.loc[index, "close"], index
-                    )  # Cover short position
-                self.buy(self.df.loc[index, "close"], index)  # Enter long position
+                    self.sell(self.df.loc[index, "close"], index)
+                self.buy(self.df.loc[index, "close"], index)
             elif row["combined_signal"] == "SELL":
                 if self.long_position > 0:
-                    self.sell(self.df.loc[index, "close"], index)  # Exit long position
+                    self.sell(self.df.loc[index, "close"], index)
                 elif self.allow_short:
-                    self.sell(
-                        self.df.loc[index, "close"], index
-                    )  # Enter short position
+                    self.sell(self.df.loc[index, "close"], index)
 
     @staticmethod
-    def combine_signals(row):
-        buy_count = (row == "BUY").sum()
-        sell_count = (row == "SELL").sum()
+    def combine_signals(row) -> Literal["BUY", "SELL", "HOLD"]:
+        buy_count: int = (row == "BUY").sum()
+        sell_count: int = (row == "SELL").sum()
 
         if buy_count > sell_count:
             return "BUY"
@@ -122,25 +127,10 @@ class RSIStrategy(BaseStrategy):
         initial_balance: float,
         rsi_period: int = 14,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.rsi_signal = signals.RSISignal(candle_frame, rsi_period)
-
-    def apply_strategy(self):
-        # Generate RSI signals
-        signal_df = self.rsi_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["RSI_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["RSI_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.RSISignal(candle_frame, rsi_period)
+        self.signal_df = self.signal.generate()
 
 
 class MACDStrategy(BaseStrategy):
@@ -152,27 +142,12 @@ class MACDStrategy(BaseStrategy):
         macd_slow: int = 26,
         macd_signal: int = 9,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.macd_signal = signals.MACDSignal(
+        self.signal = signals.MACDSignal(
             candle_frame, macd_fast, macd_slow, macd_signal
         )
-
-    def apply_strategy(self):
-        # Generate MACD signals
-        signal_df = self.macd_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["MACD_strategy_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["MACD_strategy_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal_df = self.signal.generate()
 
 
 class StochasticStrategy(BaseStrategy):
@@ -183,27 +158,10 @@ class StochasticStrategy(BaseStrategy):
         k_window: int = 14,
         d_window: int = 3,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.stochastic_signal = signals.StochasticSignal(
-            candle_frame, k_window, d_window
-        )
-
-    def apply_strategy(self):
-        # Generate Stochastic signals
-        signal_df = self.stochastic_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["Stoch_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["Stoch_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.StochasticSignal(candle_frame, k_window, d_window)
+        self.signal_df = self.signal.generate()
 
 
 class TSIStrategy(BaseStrategy):
@@ -214,25 +172,10 @@ class TSIStrategy(BaseStrategy):
         window_slow: int = 25,
         window_fast: int = 13,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.tsi_signal = signals.TSISignal(candle_frame, window_slow, window_fast)
-
-    def apply_strategy(self):
-        # Generate TSI signals
-        signal_df = self.tsi_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["TSI_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["TSI_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.TSISignal(candle_frame, window_slow, window_fast)
+        self.signal_df = self.signal.generate()
 
 
 class UltimateOscillatorStrategy(BaseStrategy):
@@ -244,27 +187,12 @@ class UltimateOscillatorStrategy(BaseStrategy):
         window2: int = 14,
         window3: int = 28,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.ultimate_oscillator_signal = signals.UltimateOscillatorSignal(
+        self.signal = signals.UltimateOscillatorSignal(
             candle_frame, window1, window2, window3
         )
-
-    def apply_strategy(self):
-        # Generate Ultimate Oscillator signals
-        signal_df = self.ultimate_oscillator_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["Ultimate_Osc_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["Ultimate_Osc_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal_df = self.signal.generate()
 
 
 class WilliamsRStrategy(BaseStrategy):
@@ -274,25 +202,10 @@ class WilliamsRStrategy(BaseStrategy):
         initial_balance: float,
         lbp: int = 14,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.williams_r_signal = signals.WilliamsRSignal(candle_frame, lbp)
-
-    def apply_strategy(self):
-        # Generate Williams %R signals
-        signal_df = self.williams_r_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["WilliamsR_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["WilliamsR_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.WilliamsRSignal(candle_frame, lbp)
+        self.signal_df = self.signal.generate()
 
 
 class AwesomeOscillatorStrategy(BaseStrategy):
@@ -303,27 +216,10 @@ class AwesomeOscillatorStrategy(BaseStrategy):
         window1: int = 5,
         window2: int = 34,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.awesome_oscillator_signal = signals.AwesomeOscillatorSignal(
-            candle_frame, window1, window2
-        )
-
-    def apply_strategy(self):
-        # Generate Awesome Oscillator signals
-        signal_df = self.awesome_oscillator_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["Awesome_Osc_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["Awesome_Osc_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.AwesomeOscillatorSignal(candle_frame, window1, window2)
+        self.signal_df = self.signal.generate()
 
 
 class ADXStrategy(BaseStrategy):
@@ -333,25 +229,10 @@ class ADXStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.adx_signal = signals.ADXSignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate ADX signals
-        signal_df = self.adx_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["ADX_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["ADX_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.ADXSignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class AroonStrategy(BaseStrategy):
@@ -361,25 +242,10 @@ class AroonStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 25,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.aroon_signal = signals.AroonSignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate Aroon signals
-        signal_df = self.aroon_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["Aroon_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["Aroon_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.AroonSignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class CCIStrategy(BaseStrategy):
@@ -389,25 +255,10 @@ class CCIStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.cci_signal = signals.CCISignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate CCI signals
-        signal_df = self.cci_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["CCI_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["CCI_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.CCISignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class BollingerBandsStrategy(BaseStrategy):
@@ -418,27 +269,10 @@ class BollingerBandsStrategy(BaseStrategy):
         window: int = 20,
         window_dev: int = 2,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.bollinger_signal = signals.BollingerBandsSignal(
-            candle_frame, window, window_dev
-        )
-
-    def apply_strategy(self):
-        # Generate Bollinger Bands signals
-        signal_df = self.bollinger_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["BB_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["BB_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.BollingerBandsSignal(candle_frame, window, window_dev)
+        self.signal_df = self.signal.generate()
 
 
 class KeltnerChannelStrategy(BaseStrategy):
@@ -449,27 +283,10 @@ class KeltnerChannelStrategy(BaseStrategy):
         window: int = 20,
         window_atr: int = 10,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.keltner_signal = signals.KeltnerChannelSignal(
-            candle_frame, window, window_atr
-        )
-
-    def apply_strategy(self):
-        # Generate Keltner Channel signals
-        signal_df = self.keltner_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["KC_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["KC_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.KeltnerChannelSignal(candle_frame, window, window_atr)
+        self.signal_df = self.signal.generate()
 
 
 class DonchianChannelStrategy(BaseStrategy):
@@ -479,25 +296,10 @@ class DonchianChannelStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.donchian_signal = signals.DonchianChannelSignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate Donchian Channel signals
-        signal_df = self.donchian_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["Donchian_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["Donchian_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.DonchianChannelSignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class ATRStrategy(BaseStrategy):
@@ -507,25 +309,10 @@ class ATRStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.atr_signal = signals.ATRSignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate ATR signals
-        signal_df = self.atr_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["ATR_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["ATR_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.ATRSignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class OBVStrategy(BaseStrategy):
@@ -534,25 +321,10 @@ class OBVStrategy(BaseStrategy):
         candle_frame: CandleFrame,
         initial_balance: float,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.obv_signal = signals.OBVSignal(candle_frame)
-
-    def apply_strategy(self):
-        # Generate OBV signals
-        signal_df = self.obv_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["OBV_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["OBV_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.OBVSignal(candle_frame)
+        self.signal_df = self.signal.generate()
 
 
 class CMFStrategy(BaseStrategy):
@@ -562,25 +334,10 @@ class CMFStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.cmf_signal = signals.CMFSignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate CMF signals
-        signal_df = self.cmf_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["CMF_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["CMF_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.CMFSignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
 
 
 class MFIStrategy(BaseStrategy):
@@ -590,22 +347,7 @@ class MFIStrategy(BaseStrategy):
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
-    ):
+    ) -> None:
         super().__init__(candle_frame, initial_balance, allow_short)
-        self.mfi_signal = signals.MFISignal(candle_frame, window)
-
-    def apply_strategy(self):
-        # Generate MFI signals
-        signal_df = self.mfi_signal.generate_signal()
-
-        # Apply signals to execute trades
-        for index, row in signal_df.iterrows():
-            if row["MFI_signal"] == 1:
-                if self.short_position > 0:
-                    self.sell(row["close"], row.name)  # Cover short position
-                self.buy(row["close"], row.name)  # Enter long position
-            elif row["MFI_signal"] == -1:
-                if self.long_position > 0:
-                    self.sell(row["close"], row.name)  # Exit long position
-                elif self.allow_short:
-                    self.sell(row["close"], row.name)  # Enter short position
+        self.signal = signals.MFISignal(candle_frame, window)
+        self.signal_df = self.signal.generate()
