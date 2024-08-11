@@ -91,18 +91,22 @@ class StochasticSignal(BaseSignal):
         return self.df
 
 
-class TSISignal(BaseSignal):
+class TSISignal:
     def __init__(
-        self, candle_frame: CandleFrame, long: int = 25, short: int = 13
+        self, candle_frame: CandleFrame, window_slow: int = 25, window_fast: int = 13
     ) -> None:
-        super().__init__(candle_frame)
-        self.long = long
-        self.short = short
+        self.candle_frame = candle_frame
+        self.df = candle_frame.to_dataframe()
+        self.window_slow = window_slow
+        self.window_fast = window_fast
 
     def generate_signal(self) -> pd.DataFrame:
-        self.df["TSI"] = ta.momentum.TSIIndicator(
-            close=self.df["close"], long=self.long, short=self.short
-        ).tsi()
+        tsi = ta.momentum.TSIIndicator(
+            close=self.df["close"],
+            window_slow=self.window_slow,
+            window_fast=self.window_fast,
+        )
+        self.df["TSI"] = tsi.tsi()
         self.df["TSI_signal"] = 0
         self.df.loc[self.df["TSI"] > 0, "TSI_signal"] = 1  # Buy signal
         self.df.loc[self.df["TSI"] < 0, "TSI_signal"] = -1  # Sell signal
@@ -207,13 +211,16 @@ class ADXSignal(BaseSignal):
         return self.df
 
 
-class AroonSignal(BaseSignal):
+class AroonSignal:
     def __init__(self, candle_frame: CandleFrame, window: int = 25) -> None:
-        super().__init__(candle_frame)
+        self.candle_frame = candle_frame
+        self.df = candle_frame.to_dataframe()
         self.window = window
 
     def generate_signal(self) -> pd.DataFrame:
-        aroon = ta.trend.AroonIndicator(close=self.df["close"], window=self.window)
+        aroon = ta.trend.AroonIndicator(
+            high=self.df["high"], low=self.df["low"], window=self.window
+        )
         self.df["Aroon_Up"] = aroon.aroon_up()
         self.df["Aroon_Down"] = aroon.aroon_down()
         self.df["Aroon_signal"] = 0

@@ -96,6 +96,50 @@ class GetSymbol(BaseCommand):
             )
 
 
+class GetServerTime(BaseCommand):
+    COMMAND = "getServerTime"
+
+    def __init__(self, arguments: Dict[str, Any], client: APIClient) -> None:
+        super().__init__(arguments, client)
+
+    def validate_arguments(self, _arguments: Dict[str, Any]) -> None:
+        pass
+
+
+class GetChartLastRequestCommand(BaseCommand):
+    COMMAND = "getChartLastRequest"
+
+    def __init__(
+        self,
+        arguments: Dict[str, Any],
+        client: APIClient,
+    ) -> None:
+        super().__init__(arguments, client)
+
+    def validate_arguments(self, arguments: Dict[str, Any]) -> None:
+        arguments = arguments.get("info")
+
+        required_fields: List[str] = ["period", "start", "symbol"]
+        for field in required_fields:
+            if field not in arguments:
+                raise ValueError(f"Missing required argument: {field}")
+
+        period = arguments.get("period")
+        start = arguments.get("start")
+        symbol = arguments.get("symbol")
+
+        if not isinstance(period, int) or period <= 0:
+            raise ValueError(f"Period must be a positive integer, got {period}")
+
+        if not isinstance(start, int):
+            raise ValueError(f"Start must be an int, got {type(start)}")
+
+        if not isinstance(symbol, str):
+            raise ValueError(
+                f"Symbol must be a string, got {type(symbol)}"
+            )
+
+
 class GetChartRangeRequestCommand(BaseCommand):
     COMMAND = "getChartRangeRequest"
 
@@ -147,3 +191,13 @@ class GetChartRangeRequestCommand(BaseCommand):
                 logger.info(f"API will return {ticks} candles from start time {start}")
             elif ticks < 0:
                 logger.info(f"API will return {-ticks} candles to start time {start}")
+
+
+class TradeTransactionCommand(BaseCommand):
+    COMMAND = "tradeTransaction"
+
+    def __init__(self, arguments: Dict[str, Any], client: APIClient) -> None:
+        super().__init__(arguments, client)
+
+    def validate_arguments(self, arguments: Dict[str, Any]) -> None:
+        pass

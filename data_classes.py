@@ -1,6 +1,7 @@
 import datetime
 from dataclasses import dataclass, field
 from typing import Dict, Any, List
+
 import pandas as pd
 
 
@@ -67,4 +68,8 @@ class CandleFrame:
             "close": [candle.close for candle in self.candles],
             "vol": [candle.vol for candle in self.candles],
         }
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        df["ctm"] = pd.to_datetime(df["ctm"], unit="ms")
+        df.set_index("ctm", inplace=True)
+
+        return pd.DataFrame(df)

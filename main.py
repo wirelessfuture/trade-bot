@@ -1,51 +1,80 @@
-import os
 import time
-import json
 
-from xtb_api_connector import APIClient
-from xtb_api_commands import LoginCommand, GetChartRangeRequestCommand, GetSymbol
 from data_classes import CandleFrame
 from enums import Period
+from constants import XTB_USER, XTB_PASSWORD
+from xtb_api_connector import APIClient
+from xtb_api_commands import LoginCommand, GetChartLastRequestCommand, GetServerTime
+import strategies
+
 
 
 if __name__ == "__main__":
-    assert os.getenv("XTB_USER"), "Required env variable 'XTB_USER' not found."
-    assert os.getenv("XTB_PASSWORD"), "Required env variable 'XTB_PASSWORD' not found."
-
     client = APIClient()
     new_login = LoginCommand(
         arguments={
-            "userId": os.getenv("XTB_USER"),
-            "password": os.getenv("XTB_PASSWORD"),
+            "userId": XTB_USER,
+            "password": XTB_PASSWORD,
         },
         client=client,
     )
-
     _ = new_login.execute()
 
-    symbol = "BITCOIN"
-    period = Period.PERIOD_M15.value
-    start = int((time.time() - Period.PERIOD_M15.value*60) * 1000)
-    end = int((time.time()) * 1000)
+    new_get_server_time = GetServerTime(None, client)
+    server_time = new_get_server_time.execute()
+    print(server_time.get("returnData"))
 
-    new_get_symbol = GetSymbol({"symbol": symbol}, client=client)
-    symbol_data = new_get_symbol.execute()
-    print(json.dumps(symbol_data, indent=4))
+    symbols = [
+        "BITCOIN",
+        "ETHEREUM"
+    ]
 
-    new_chart_range_request = GetChartRangeRequestCommand(
-        arguments={
-            "info": {
-                "symbol": symbol,
-                "period": period,
-                "start": start,
-                "end": end
-            }
-        },
-        client=client,
-    )
+    for symbol in symbols:
+        period = Period.PERIOD_M30.value
+        start = int((time.time() - Period.PERIOD_MN1.value * 60) * 1000)
 
-    candle_frame = CandleFrame(data=new_chart_range_request.execute())
+        new_chart_last_request = GetChartLastRequestCommand(
+            arguments={
+                "info": {"symbol": symbol, "period": period, "start": start}
+            },
+            client=client,
+        )
 
-    print(candle_frame.to_dataframe())
+        candle_frame = CandleFrame(data=new_chart_last_request.execute())
+
+        initial_balance = 5000
+        short = True
+
+        obv = strategies.OBVStrategy(
+            candle_frame, initial_balance=initial_balance, allow_short=short
+        )
+        rsi = strategies.RSIStrategy(
+            candle_frame, initial_balance=initial_balance, allow_short=short
+        )
+        macd = strategies.MACDStrategy(
+            candle_frame, initial_balance=initial_balance, allow_short=short
+        )
+
+        # Combine strategies
+        combined_strategy = strategies.CombinedStrategy(
+            candle_frame,
+            initial_balance=initial_balance,
+            strategies=[obv, rsi, macd],
+            allow_short=short,
+        )
+        combined_strategy.apply_strategy()
+        print(
+            combined_strategy.__class__.__name__,
+            symbol,
+            f"Starting Balance: ${initial_balance}",
+        )
+        print(
+            obv.__class__.__name__,
+            rsi.__class__.__name__,
+            macd.__class__.__name__,
+        )
+        print(combined_strategy.get_trade_log())
+
+        time.sleep(1)
 
     client.disconnect()

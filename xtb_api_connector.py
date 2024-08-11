@@ -7,7 +7,7 @@ import ssl
 from logger import logger
 
 # set to true on debug environment only
-ENABLE_DEBUG = True
+ENABLE_DEBUG = False
 
 # default connection properites
 DEFAULT_XAPI_ADDRESS = "xapi.xtb.com"
@@ -23,22 +23,6 @@ if ENABLE_DEBUG:
     logger.setLevel(DEBUG)
 else:
     logger.setLevel(CRITICAL)
-
-
-class TransactionSide(object):
-    BUY = 0
-    SELL = 1
-    BUY_LIMIT = 2
-    SELL_LIMIT = 3
-    BUY_STOP = 4
-    SELL_STOP = 5
-
-
-class TransactionType(object):
-    ORDER_OPEN = 0
-    ORDER_CLOSE = 2
-    ORDER_MODIFY = 3
-    ORDER_DELETE = 4
 
 
 class JsonSocket(object):
