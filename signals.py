@@ -1,27 +1,27 @@
 from abc import ABC, abstractmethod
 
 import ta
-import pandas as pd
-from data_classes import CandleFrame
+from pandas import DataFrame
+from data_classes import KLines
 
 
 class BaseSignal(ABC):
-    def __init__(self, candle_frame: CandleFrame) -> None:
-        self.candle_frame = candle_frame
-        self.df = candle_frame.to_dataframe()
+    def __init__(self, klines: KLines) -> None:
+        self.klines = klines
+        self.df = klines.to_dataframe()
         self.name = self.__class__.__name__
 
     @abstractmethod
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         pass
 
 
 class RSISignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, rsi_period: int = 14) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, rsi_period: int = 14) -> None:
+        super().__init__(klines)
         self.rsi_period = rsi_period
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["RSI"] = ta.momentum.RSIIndicator(
             close=self.df["close"], window=self.rsi_period
         ).rsi()
@@ -34,17 +34,17 @@ class RSISignal(BaseSignal):
 class MACDSignal(BaseSignal):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         macd_fast: int = 12,
         macd_slow: int = 26,
         macd_signal: int = 9,
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.macd_fast = macd_fast
         self.macd_slow = macd_slow
         self.macd_signal = macd_signal
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         macd = ta.trend.MACD(
             close=self.df["close"],
             window_slow=self.macd_slow,
@@ -62,13 +62,13 @@ class MACDSignal(BaseSignal):
 
 class StochasticSignal(BaseSignal):
     def __init__(
-        self, candle_frame: CandleFrame, k_window: int = 14, d_window: int = 3
+        self, klines: KLines, k_window: int = 14, d_window: int = 3
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.k_window = k_window
         self.d_window = d_window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         stochastic = ta.momentum.StochasticOscillator(
             high=self.df["high"],
             low=self.df["low"],
@@ -86,14 +86,14 @@ class StochasticSignal(BaseSignal):
 
 class TSISignal(BaseSignal):
     def __init__(
-        self, candle_frame: CandleFrame, window_slow: int = 25, window_fast: int = 13
+        self, klines: KLines, window_slow: int = 25, window_fast: int = 13
     ) -> None:
-        self.candle_frame = candle_frame
-        self.df = candle_frame.to_dataframe()
+        self.klines = klines
+        self.df = klines.to_dataframe()
         self.window_slow = window_slow
         self.window_fast = window_fast
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         tsi = ta.momentum.TSIIndicator(
             close=self.df["close"],
             window_slow=self.window_slow,
@@ -109,17 +109,17 @@ class TSISignal(BaseSignal):
 class UltimateOscillatorSignal(BaseSignal):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         window1: int = 7,
         window2: int = 14,
         window3: int = 28,
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.window1 = window1
         self.window2 = window2
         self.window3 = window3
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["Ultimate_Osc"] = ta.momentum.UltimateOscillator(
             high=self.df["high"],
             low=self.df["low"],
@@ -135,11 +135,11 @@ class UltimateOscillatorSignal(BaseSignal):
 
 
 class WilliamsRSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, lbp: int = 14) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, lbp: int = 14) -> None:
+        super().__init__(klines)
         self.lbp = lbp
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["WilliamsR"] = ta.momentum.WilliamsRIndicator(
             high=self.df["high"],
             low=self.df["low"],
@@ -154,13 +154,13 @@ class WilliamsRSignal(BaseSignal):
 
 class AwesomeOscillatorSignal(BaseSignal):
     def __init__(
-        self, candle_frame: CandleFrame, window1: int = 5, window2: int = 34
+        self, klines: KLines, window1: int = 5, window2: int = 34
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.window1 = window1
         self.window2 = window2
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["Awesome_Osc"] = ta.momentum.AwesomeOscillatorIndicator(
             high=self.df["high"],
             low=self.df["low"],
@@ -174,11 +174,11 @@ class AwesomeOscillatorSignal(BaseSignal):
 
 
 class ADXSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 14) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 14) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         adx = ta.trend.ADXIndicator(
             high=self.df["high"],
             low=self.df["low"],
@@ -188,19 +188,19 @@ class ADXSignal(BaseSignal):
         self.df["ADX"] = adx.adx()
         self.df["ADX_pos"] = adx.adx_pos()
         self.df["ADX_neg"] = adx.adx_neg()
-        self.df["ADX_signal"] = 0
-        self.df.loc[self.df["ADX_pos"] > self.df["ADX_neg"], "ADX_signal"] = 1
-        self.df.loc[self.df["ADX_pos"] < self.df["ADX_neg"], "ADX_signal"] = -1
+        self.df[self.name] = 0
+        self.df.loc[self.df["ADX_pos"] > self.df["ADX_neg"], self.name] = 1
+        self.df.loc[self.df["ADX_pos"] < self.df["ADX_neg"], self.name] = -1
         return self.df
 
 
 class AroonSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 25) -> None:
-        self.candle_frame = candle_frame
-        self.df = candle_frame.to_dataframe()
+    def __init__(self, klines: KLines, window: int = 25) -> None:
+        self.klines = klines
+        self.df = klines.to_dataframe()
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         aroon = ta.trend.AroonIndicator(
             high=self.df["high"], low=self.df["low"], window=self.window
         )
@@ -213,11 +213,11 @@ class AroonSignal(BaseSignal):
 
 
 class CCISignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 20) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 20) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["CCI"] = ta.trend.CCIIndicator(
             high=self.df["high"],
             low=self.df["low"],
@@ -232,13 +232,13 @@ class CCISignal(BaseSignal):
 
 class BollingerBandsSignal(BaseSignal):
     def __init__(
-        self, candle_frame: CandleFrame, window: int = 20, window_dev: int = 2
+        self, klines: KLines, window: int = 20, window_dev: int = 2
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.window = window
         self.window_dev = window_dev
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         bollinger = ta.volatility.BollingerBands(
             close=self.df["close"], window=self.window, window_dev=self.window_dev
         )
@@ -253,13 +253,13 @@ class BollingerBandsSignal(BaseSignal):
 
 class KeltnerChannelSignal(BaseSignal):
     def __init__(
-        self, candle_frame: CandleFrame, window: int = 20, window_atr: int = 10
+        self, klines: KLines, window: int = 20, window_atr: int = 10
     ) -> None:
-        super().__init__(candle_frame)
+        super().__init__(klines)
         self.window = window
         self.window_atr = window_atr
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         keltner = ta.volatility.KeltnerChannel(
             high=self.df["high"],
             low=self.df["low"],
@@ -276,11 +276,11 @@ class KeltnerChannelSignal(BaseSignal):
 
 
 class DonchianChannelSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 20) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 20) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         donchian = ta.volatility.DonchianChannel(
             high=self.df["high"],
             low=self.df["low"],
@@ -296,11 +296,11 @@ class DonchianChannelSignal(BaseSignal):
 
 
 class ATRSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 14) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 14) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["ATR"] = ta.volatility.AverageTrueRange(
             high=self.df["high"],
             low=self.df["low"],
@@ -321,12 +321,12 @@ class ATRSignal(BaseSignal):
 
 
 class OBVSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines) -> None:
+        super().__init__(klines)
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["OBV"] = ta.volume.OnBalanceVolumeIndicator(
-            close=self.df["close"], volume=self.df["vol"]
+            close=self.df["close"], volume=self.df["quote_asset_volume"]
         ).on_balance_volume()
         self.df[self.name] = (
             self.df["OBV"].diff().apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
@@ -335,16 +335,16 @@ class OBVSignal(BaseSignal):
 
 
 class CMFSignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 20) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 20) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["CMF"] = ta.volume.ChaikinMoneyFlowIndicator(
             high=self.df["high"],
             low=self.df["low"],
             close=self.df["close"],
-            volume=self.df["vol"],
+            volume=self.df["quote_asset_volume"],
             window=self.window,
         ).chaikin_money_flow()
         self.df[self.name] = 0
@@ -354,16 +354,16 @@ class CMFSignal(BaseSignal):
 
 
 class MFISignal(BaseSignal):
-    def __init__(self, candle_frame: CandleFrame, window: int = 14) -> None:
-        super().__init__(candle_frame)
+    def __init__(self, klines: KLines, window: int = 14) -> None:
+        super().__init__(klines)
         self.window = window
 
-    def generate(self) -> pd.DataFrame:
+    def generate(self) -> DataFrame:
         self.df["MFI"] = ta.volume.MFIIndicator(
             high=self.df["high"],
             low=self.df["low"],
             close=self.df["close"],
-            volume=self.df["vol"],
+            volume=self.df["quote_asset_volume"],
             window=self.window,
         ).money_flow_index()
         self.df[self.name] = 0
