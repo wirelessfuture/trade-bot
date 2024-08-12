@@ -1,83 +1,55 @@
-import time
+from time import time
+from typing import List, Any
 
-from data_classes import CandleFrame
-from enums import Period
-from constants import XTB_USER, XTB_PASSWORD
-from xtb_api_connector import APIClient
-from xtb_api_commands import LoginCommand, GetChartLastRequestCommand
-import strategies
-
+from binance.spot import Spot
+from data_classes import KLines
+from enums import Interval
+from constants import (
+    BINANCE_TESTNET_API_KEY,
+    BINANCE_TESTNET_API_SECRET,
+    BINANCE_TRADE_CURRENCY,
+    BINANCE_TESTNET_DATA_URL,
+)
+from strategies import RSIStrategy, MACDStrategy, CombinedStrategy
 
 
 if __name__ == "__main__":
-    client = APIClient()
-    new_login = LoginCommand(
-        arguments={
-            "userId": XTB_USER,
-            "password": XTB_PASSWORD,
-        },
-        client=client,
+    data_client = Spot(
+        api_key=BINANCE_TESTNET_API_KEY,
+        api_secret=BINANCE_TESTNET_API_SECRET,
+        base_url=BINANCE_TESTNET_DATA_URL,
     )
-    _ = new_login.execute()
 
-    symbols = [
-        "BINANCECOIN",
-        "BITCOIN",
-        "BITCOINCASH",
-        "CHILIZ",
-        "DOGECOIN",
-        "ETHEREUM",
-        "KYBER",
-        "LITECOIN",
-        "MAKER",
-        "STELLAR",
-        "TRON",
-        "ZCASH"
-    ]
+    symbol = f"ETH{BINANCE_TRADE_CURRENCY}"
+    interval = Interval.MINUTE_30.value
+    start_time = int((time() - 10080 * 60) * 1000)
+    end_time = int((time()) * 1000)
+    initial_balance = 10000
 
-    for symbol in symbols:
-        period = Period.PERIOD_M30.value
-        start = int((time.time() - Period.PERIOD_MN1.value * 6 * 60) * 1000)
+    new_kline_data: List[List[Any]] = data_client.klines(
+        symbol=symbol,
+        interval=interval,
+        startTime=start_time,
+        endTime=end_time,
+    )
 
-        new_chart_last_request = GetChartLastRequestCommand(
-            arguments={
-                "info": {"symbol": symbol, "period": period, "start": start}
-            },
-            client=client,
-        )
+    new_klines: KLines = KLines(data=new_kline_data)
 
-        candle_frame = CandleFrame(data=new_chart_last_request.execute())
+    rsi = RSIStrategy(
+        klines=new_klines,
+        initial_balance=initial_balance,
+        allow_short=False,
+    )
 
-        initial_balance = 1000
-        short = False
+    macd = MACDStrategy(
+        klines=new_klines,
+        initial_balance=initial_balance,
+        allow_short=False,
+    )
 
-        rsi = strategies.RSIStrategy(
-            candle_frame, initial_balance=initial_balance, allow_short=short
-        )
-        macd = strategies.MACDStrategy(
-            candle_frame, initial_balance=initial_balance, allow_short=short
-        )
-
-        # Combine strategies
-        combined_strategy = strategies.CombinedStrategy(
-            candle_frame,
-            initial_balance=initial_balance,
-            strategies=[rsi, macd],
-            allow_short=short,
-        )
-        combined_strategy.apply_combined_strategy()
-        print(
-            combined_strategy.__class__.__name__,
-            symbol,
-            f"Starting Balance: ${initial_balance}",
-        )
-        print(
-            rsi.__class__.__name__,
-            macd.__class__.__name__,
-        )
-        print(combined_strategy.get_trade_log())
-        # combined_strategy.get_trade_log().to_csv(f"output/{symbol}.csv")
-
-        time.sleep(1)
-
-    client.disconnect()
+    combined_strategy = CombinedStrategy(
+        klines=new_klines, initial_balance=initial_balance, strategies=[rsi, macd]
+    )
+    combined_strategy.apply_combined_strategy()
+    print(combined_strategy.get_trade_log())
+    print(new_klines.to_dataframe())
