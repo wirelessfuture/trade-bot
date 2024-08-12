@@ -1,4 +1,4 @@
 # Trade Bot
-- Uses XTB API
+- Uses Binance API
 - TA
 - Pandas
