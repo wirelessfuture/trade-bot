@@ -1,21 +1,20 @@
-import pandas as pd
 from abc import ABC
 from typing import List, Literal
 
 from pandas import DataFrame
 import signals
-from data_classes import CandleFrame
+from data_classes import KLines
 
 
 class BaseStrategy(ABC):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         allow_short: bool = False,
     ) -> None:
-        self.candle_frame: CandleFrame = candle_frame
-        self.df: DataFrame = candle_frame.to_dataframe()
+        self.klines: KLines = klines
+        self.df: DataFrame = klines.to_dataframe()
         self.balance: float = initial_balance
         self.allow_short: bool = allow_short
         self.long_position: int = 0
@@ -65,7 +64,7 @@ class BaseStrategy(ABC):
             )
 
     def get_trade_log(self) -> DataFrame:
-        return pd.DataFrame(
+        return DataFrame(
             self.trade_log,
             columns=["timestamp", "action", "price", "position", "balance"],
         )
@@ -74,16 +73,16 @@ class BaseStrategy(ABC):
 class CombinedStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         strategies: List[BaseStrategy],
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
+        super().__init__(klines, initial_balance, allow_short)
         self.strategies = strategies
 
     def apply_combined_strategy(self) -> None:
-        combined_signals = pd.DataFrame(index=self.df.index)
+        combined_signals = DataFrame(index=self.df.index)
 
         for strategy in self.strategies:
             strategy.apply_strategy()
@@ -123,74 +122,72 @@ class CombinedStrategy(BaseStrategy):
 class RSIStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         rsi_period: int = 14,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.RSISignal(candle_frame, rsi_period)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.RSISignal(klines, rsi_period)
         self.signal_df = self.signal.generate()
 
 
 class MACDStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         macd_fast: int = 12,
         macd_slow: int = 26,
         macd_signal: int = 9,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.MACDSignal(
-            candle_frame, macd_fast, macd_slow, macd_signal
-        )
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.MACDSignal(klines, macd_fast, macd_slow, macd_signal)
         self.signal_df = self.signal.generate()
 
 
 class StochasticStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         k_window: int = 14,
         d_window: int = 3,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.StochasticSignal(candle_frame, k_window, d_window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.StochasticSignal(klines, k_window, d_window)
         self.signal_df = self.signal.generate()
 
 
 class TSIStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window_slow: int = 25,
         window_fast: int = 13,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.TSISignal(candle_frame, window_slow, window_fast)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.TSISignal(klines, window_slow, window_fast)
         self.signal_df = self.signal.generate()
 
 
 class UltimateOscillatorStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window1: int = 7,
         window2: int = 14,
         window3: int = 28,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
+        super().__init__(klines, initial_balance, allow_short)
         self.signal = signals.UltimateOscillatorSignal(
-            candle_frame, window1, window2, window3
+            klines, window1, window2, window3
         )
         self.signal_df = self.signal.generate()
 
@@ -198,156 +195,156 @@ class UltimateOscillatorStrategy(BaseStrategy):
 class WilliamsRStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         lbp: int = 14,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.WilliamsRSignal(candle_frame, lbp)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.WilliamsRSignal(klines, lbp)
         self.signal_df = self.signal.generate()
 
 
 class AwesomeOscillatorStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window1: int = 5,
         window2: int = 34,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.AwesomeOscillatorSignal(candle_frame, window1, window2)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.AwesomeOscillatorSignal(klines, window1, window2)
         self.signal_df = self.signal.generate()
 
 
 class ADXStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.ADXSignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.ADXSignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class AroonStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 25,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.AroonSignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.AroonSignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class CCIStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.CCISignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.CCISignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class BollingerBandsStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 20,
         window_dev: int = 2,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.BollingerBandsSignal(candle_frame, window, window_dev)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.BollingerBandsSignal(klines, window, window_dev)
         self.signal_df = self.signal.generate()
 
 
 class KeltnerChannelStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 20,
         window_atr: int = 10,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.KeltnerChannelSignal(candle_frame, window, window_atr)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.KeltnerChannelSignal(klines, window, window_atr)
         self.signal_df = self.signal.generate()
 
 
 class DonchianChannelStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.DonchianChannelSignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.DonchianChannelSignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class ATRStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.ATRSignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.ATRSignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class OBVStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.OBVSignal(candle_frame)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.OBVSignal(klines)
         self.signal_df = self.signal.generate()
 
 
 class CMFStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 20,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.CMFSignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.CMFSignal(klines, window)
         self.signal_df = self.signal.generate()
 
 
 class MFIStrategy(BaseStrategy):
     def __init__(
         self,
-        candle_frame: CandleFrame,
+        klines: KLines,
         initial_balance: float,
         window: int = 14,
         allow_short: bool = False,
     ) -> None:
-        super().__init__(candle_frame, initial_balance, allow_short)
-        self.signal = signals.MFISignal(candle_frame, window)
+        super().__init__(klines, initial_balance, allow_short)
+        self.signal = signals.MFISignal(klines, window)
         self.signal_df = self.signal.generate()
